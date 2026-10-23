@@ -4,7 +4,7 @@ Tailscale for UniFi gateways. Installs and persists `tailscaled` on the UDM, the
 
 **Status:** design stage. No release yet.
 
-## What it does
+## What It Does
 
 - Installs the official Tailscale static binaries onto the gateway and supervises `tailscaled` as a child process. No packages, no containers, nothing outside `/data`.
 - Advertises your UniFi networks as subnet routes and gets them approved, either through `autoApprovers` in your policy or through the Tailscale API.
@@ -13,6 +13,24 @@ Tailscale for UniFi gateways. Installs and persists `tailscaled` on the UDM, the
 - Runs as a reconcile loop. It reads UniFi and Tailscale state, computes a diff, applies it, and repeats on a timer and on UniFi events.
 
 One static Go binary. No agents on other devices. No second source of truth.
+
+## How It Works
+
+```mermaid
+flowchart LR
+    unifi["UniFi Network API<br/>networks, clients, zones, events"] --> snapshot["Snapshot"]
+    control["Tailscale control API<br/>routes, DNS, policy"] --> snapshot
+
+    snapshot --> routes["Routes reconciler"]
+    snapshot --> acl["ACL reconciler"]
+    snapshot --> dns["DNS reconciler"]
+
+    routes --> localapi["tailscaled LocalAPI<br/>advertise routes"]
+    acl --> policy["Policy file<br/>managed region"]
+    dns --> responder["DNS responder<br/>on the tailnet address"]
+
+    supervisor["Supervisor"] --> tailscaled["tailscaled<br/>/data/tailgate/state"]
+```
 
 Each reconciler implements the same two-step interface: `Plan` produces a diff from a snapshot of observed state, `Apply` executes it. `tailgate plan` prints the diff without applying. `tailgate sync` applies once. `tailgate run` loops.
 
@@ -25,7 +43,7 @@ Each reconciler implements the same two-step interface: `Plan` produces a diff f
 
 ## Install
 
-### 1. Prepare the Tailscale side
+### 1. Prepare the Tailscale Side
 
 Add a tag and owner to your policy file. tailgate's node carries this tag.
 
@@ -42,13 +60,13 @@ Create an OAuth client at https://login.tailscale.com/admin/settings/oauth with:
 
 Keep the client secret. tailgate uses it both as the node's auth key (tagged, preauthorized) and for API calls.
 
-### 2. Prepare the UniFi side
+### 2. Prepare the UniFi Side
 
 UniFi OS 9.x and newer: create a local API key under Settings → Control Plane → Integrations.
 
 Older UniFi OS: create a local admin account with the Network application scoped to it. tailgate will log in with username and password.
 
-### 3. Install on the gateway
+### 3. Install on the Gateway
 
 ```sh
 ssh root@192.168.1.1
@@ -105,7 +123,7 @@ acl:
 
 Secrets can be inline, `${ENV_VAR}` references, or `file:/data/tailgate/secrets/name`.
 
-### 5. Bring it up
+### 5. Bring It Up
 
 ```sh
 tailgate up        # joins the tailnet as a tagged, preauthorized node
@@ -125,7 +143,7 @@ tailgate doctor
 
 `doctor` checks persistence of `/data/tailgate`, the systemd unit, `tailscaled` health, IP forwarding, UniFi API reachability and credentials, Tailscale API scopes, and whether the DNS port is bound on the tailnet address.
 
-### Firmware updates
+### Firmware Updates
 
 `/data` survives UniFi OS firmware updates. The tailgate binary, config, Tailscale binaries, tailscaled state and node key all live there, so the node keeps its identity and nothing needs re-authorising.
 
@@ -139,7 +157,7 @@ This re-registers the unit and starts the service. It does not re-download anyth
 
 UniFi OS does not offer a supported persistent boot hook. tailgate does not pretend otherwise. A boot hook that survives updates is on the roadmap if a reliable mechanism exists for a given firmware line.
 
-## Configuration reference
+## Configuration Reference
 
 ```yaml
 unifi:
@@ -201,7 +219,7 @@ log:
   format: text                  # text | json
 ```
 
-## CLI reference
+## CLI Reference
 
 | Command | Description |
 |---|---|
@@ -222,7 +240,7 @@ Global flags: `--config`, `--log-level`, `--dry-run` (on `sync` and `run`).
 
 ## Design
 
-### Package layout
+### Package Layout
 
 ```
 cmd/tailgate/           CLI entry point and subcommands
@@ -242,7 +260,7 @@ internal/naming/        UniFi name -> DNS label normalisation and collision hand
 
 The UniFi client is hand-written against the handful of endpoints tailgate needs: networks, known clients, active clients, firewall zones, device info, and the websocket event stream. It is not a general-purpose UniFi library and does not aim to be one.
 
-### Reconciler interface
+### Reconciler Interface
 
 ```go
 package reconcile
@@ -313,7 +331,7 @@ Everything else in the file is preserved byte for byte, comments included, using
 
 Zones come from the UniFi zone-based firewall. On Network 8.x, or for any zone you leave out of config, nothing is written. `acl.networks` lets you target a single network directly, which also overrides the zone rule for that network.
 
-### Supervision and persistence
+### Supervision and Persistence
 
 `tailgate run` starts `tailscaled` as a child with `--state=/data/tailgate/state/tailscaled.state --socket=/data/tailgate/tailscaled.sock --tun=tailscale0`, restarts it with backoff if it exits, and forwards SIGTERM for clean shutdown. There is one systemd unit, for tailgate, and it owns both processes.
 
@@ -332,11 +350,11 @@ All mutable state is under `/data/tailgate`:
   secrets/                  optional, 0600, referenced as file: in config
 ```
 
-### Event-driven sync
+### Event-Driven Sync
 
 With `reconcile.watch_events` on, tailgate subscribes to the UniFi event stream and triggers a sync, debounced, on network configuration changes, client fixed-IP changes, and firewall zone changes. The interval timer still runs as a backstop. A sync is never run concurrently with another; events during a sync queue one follow-up.
 
-## Non-goals
+## Non-Goals
 
 - A UniFi controller replacement, or any UI.
 - Installing Tailscale on devices other than the gateway.
