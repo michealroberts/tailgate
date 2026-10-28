@@ -1,0 +1,38 @@
+/**************************************************************************************/
+
+// @author         Michael Roberts <michael@observerly.com>
+// @package        tailgate
+// @license        Copyright © 2026 Michael Roberts
+
+/**************************************************************************************/
+
+{
+  "name": "tailgate",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "runArgs": [
+    "--name=tailgate"
+  ],
+  "remoteUser": "vscode",
+  "mounts": [
+    // Go module cache, kept across container rebuilds.
+    "source=tailgate-gopkg-${devcontainerId},target=/go/pkg,type=volume",
+    // Go build cache and golangci-lint cache.
+    "source=tailgate-cache-${devcontainerId},target=/home/vscode/.cache,type=volume"
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.go"
+      ],
+      "settings": {
+        "go.toolsManagement.checkForUpdates": "off",
+        "go.lintTool": "golangci-lint-v2",
+        "go.lintOnSave": "package"
+      }
+    }
+  }
+}
+
+/**************************************************************************************/
